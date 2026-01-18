@@ -63,7 +63,8 @@ if st.button("🚀 Run Backtest"):
     
     # Display results
     st.subheader("Results Table")
-    st.dataframe(results_df.sort_values("sharpe", ascending=False), use_container_width=True)
+    st.dataframe(results_df.sort_values("sharpe", ascending=False), width='stretch')
+
     
     # Statistics
     col1, col2, col3 = st.columns(3)
