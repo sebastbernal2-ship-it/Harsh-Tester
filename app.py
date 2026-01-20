@@ -331,11 +331,11 @@ if run_tests:
     # ======================================================================
     # TEST 3: MONTE CARLO STRESS TEST
     # ======================================================================
-    st.subheader("Test 3️⃣: Monte Carlo Stress Test (1000 Sims)")
+    st.subheader("Test 3️⃣: Monte Carlo Stress Test (500 Sims)")
     
     with st.spinner("Running Monte Carlo simulations..."):
         try:
-            mc_results = tester.monte_carlo_test(strategy_code, param_grid, n_sims=1000)
+            mc_results = tester.monte_carlo_test(strategy_code, param_grid, n_sims=500)
             if not mc_results.empty:
                 col1, col2, col3, col4, col5, col6 = st.columns(6)
                 col1.metric("MC Sharpe 5%", f"{mc_results['mc_sharpe_5pct'].mean():.2f}")
