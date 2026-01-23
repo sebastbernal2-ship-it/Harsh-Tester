@@ -2,7 +2,6 @@ import warnings
 import os
 import pandas as pd
 import numpy as np
-from itertools import product
 
 # Suppress warnings
 os.environ['PYTHONWARNINGS'] = 'ignore'
@@ -13,130 +12,101 @@ import streamlit as st
 import yfinance as yf
 import plotly.graph_objects as go
 
-# Import from harsh_tester
 from harsh_tester import HarshTester
 
 # ============================================================================
-# PREDEFINED STRATEGIES
+# PREDEFINED STRATEGIES (window params cast to int for safety)
 # ============================================================================
-
 PREDEFINED_STRATEGIES = {
     "Momentum (Fast/Slow MA)": """
 import pandas as pd
 import numpy as np
-
 class Strategy:
     def __init__(self, data, params=None):
         self.data = data
         self.params = params or {}
-    
     def generate_signals(self):
-        fast = self.params.get('fast', 63)
-        slow = self.params.get('slow', 126)
-        
+        fast = int(self.params.get('fast', 63))
+        slow = int(self.params.get('slow', 126))
         fast_ma = self.data.rolling(fast).mean()
         slow_ma = self.data.rolling(slow).mean()
-        
         entries = (fast_ma > slow_ma).shift(1).fillna(False).astype(bool)
         exits = (fast_ma <= slow_ma).shift(1).fillna(False).astype(bool)
-        
         return entries, exits
 """,
     "Mean Reversion (Z-Score)": """
 import pandas as pd
 import numpy as np
-
 class Strategy:
     def __init__(self, data, params=None):
         self.data = data
         self.params = params or {}
-    
     def generate_signals(self):
-        lookback = self.params.get('lookback', 20)
-        z_entry = self.params.get('z_entry', 1.0)
-        z_exit = self.params.get('z_exit', 0.5)
-        
+        lookback = int(self.params.get('lookback', 20))
+        z_entry = float(self.params.get('z_entry', 1.0))
+        z_exit = float(self.params.get('z_exit', 0.5))
         rolling_mean = self.data.rolling(lookback).mean()
         rolling_std = self.data.rolling(lookback).std()
         z_score = (self.data - rolling_mean) / (rolling_std + 1e-6)
-        
         entries = (z_score < -z_entry).shift(1).fillna(False).astype(bool)
         exits = (z_score < -z_exit).shift(1).fillna(False).astype(bool)
-        
         return entries, exits
 """,
     "RSI (Overbought/Oversold)": """
 import pandas as pd
 import numpy as np
-
 class Strategy:
     def __init__(self, data, params=None):
         self.data = data
         self.params = params or {}
-    
     def generate_signals(self):
-        period = self.params.get('period', 14)
-        oversold = self.params.get('oversold', 30)
-        overbought = self.params.get('overbought', 70)
-        
+        period = int(self.params.get('period', 14))
+        oversold = float(self.params.get('oversold', 30))
+        overbought = float(self.params.get('overbought', 70))
         delta = self.data.diff()
         gain = delta.where(delta > 0, 0).rolling(window=period).mean()
         loss = -delta.where(delta < 0, 0).rolling(window=period).mean()
-        
         rs = gain / (loss + 1e-6)
         rsi = 100 - (100 / (1 + rs))
-        
         entries = (rsi < oversold).shift(1).fillna(False).astype(bool)
         exits = (rsi > overbought).shift(1).fillna(False).astype(bool)
-        
         return entries, exits
 """,
     "Bollinger Bands Breakout": """
 import pandas as pd
 import numpy as np
-
 class Strategy:
     def __init__(self, data, params=None):
         self.data = data
         self.params = params or {}
-    
     def generate_signals(self):
-        period = self.params.get('period', 20)
-        num_std = self.params.get('num_std', 2.0)
-        
+        period = int(self.params.get('period', 20))
+        num_std = float(self.params.get('num_std', 2.0))
         sma = self.data.rolling(period).mean()
         std = self.data.rolling(period).std()
-        
         upper_band = sma + num_std * std
         lower_band = sma - num_std * std
-        
         entries = (self.data < lower_band).shift(1).fillna(False).astype(bool)
         exits = (self.data > upper_band).shift(1).fillna(False).astype(bool)
-        
         return entries, exits
 """,
     "MACD Crossover": """
 import pandas as pd
 import numpy as np
-
 class Strategy:
     def __init__(self, data, params=None):
         self.data = data
         self.params = params or {}
-    
     def generate_signals(self):
-        fast_period = self.params.get('fast_period', 12)
-        slow_period = self.params.get('slow_period', 26)
-        signal_period = self.params.get('signal_period', 9)
-        
+        fast_period = int(self.params.get('fast_period', 12))
+        slow_period = int(self.params.get('slow_period', 26))
+        signal_period = int(self.params.get('signal_period', 9))
         ema_fast = self.data.ewm(span=fast_period).mean()
         ema_slow = self.data.ewm(span=slow_period).mean()
         macd = ema_fast - ema_slow
         signal = macd.ewm(span=signal_period).mean()
-        
         entries = (macd > signal).shift(1).fillna(False).astype(bool)
         exits = (macd < signal).shift(1).fillna(False).astype(bool)
-        
         return entries, exits
 """,
 }
@@ -144,27 +114,22 @@ class Strategy:
 # ============================================================================
 # STREAMLIT PAGE CONFIG
 # ============================================================================
-
 st.set_page_config(page_title="Harsh Strategy Tester", layout="wide")
-st.title("🔬 Harsh Strategy Tester - Production Grade v4.1 (All 10 Tests)")
+st.title("🔬 Harsh Strategy Tester - Production Grade (20 Tests)")
 
 # ============================================================================
 # SIDEBAR: DATA SETUP
 # ============================================================================
-
 st.sidebar.header("📊 Data Setup")
-
 symbols_input = st.sidebar.text_area(
     "Asset Universe (comma-separated, e.g., SPY,TLT,GLD)",
     value="SPY,TLT,GLD",
     height=80
 )
 symbols = [s.strip().upper() for s in symbols_input.split(',') if s.strip()]
-
 start_date = st.sidebar.date_input("Start Date", value=pd.to_datetime('2020-01-01'))
 end_date = st.sidebar.date_input("End Date", value=pd.to_datetime('2024-12-31'))
 
-# Load data
 @st.cache_data
 def load_data(symbols_list, start, end):
     data = yf.download(symbols_list, start=start, end=end)['Close']
@@ -180,19 +145,46 @@ except Exception as e:
     st.stop()
 
 # ============================================================================
-# MAIN: STRATEGY SELECTION
+# MAIN: STRATEGY SELECTION (with Custom option)
 # ============================================================================
-
 st.header("1️⃣ Strategy Selection")
 
+strategy_options = list(PREDEFINED_STRATEGIES.keys()) + ["Custom"]
 strategy_choice = st.selectbox(
     "Select strategy from dropdown",
-    options=list(PREDEFINED_STRATEGIES.keys()),
+    options=strategy_options,
     index=0,
-    help="Choose a predefined strategy"
+    help="Choose a predefined strategy or paste your own custom code"
 )
 
-strategy_code = PREDEFINED_STRATEGIES[strategy_choice]
+DEFAULT_CUSTOM_STRATEGY = """
+import pandas as pd
+import numpy as np
+
+class Strategy:
+    def __init__(self, data, params=None):
+        self.data = data
+        self.params = params or {}
+
+    def generate_signals(self):
+        # Example: Simple moving average crossover (works for single or multi-asset DataFrame)
+        fast = int(self.params.get('fast', 20))
+        slow = int(self.params.get('slow', 50))
+        fast_ma = self.data.rolling(fast).mean()
+        slow_ma = self.data.rolling(slow).mean()
+        entries = (fast_ma > slow_ma).shift(1).fillna(False).astype(bool)
+        exits   = (fast_ma <= slow_ma).shift(1).fillna(False).astype(bool)
+        return entries, exits
+"""
+
+if strategy_choice == "Custom":
+    strategy_code = st.text_area(
+        "Paste your custom Strategy code (must define class Strategy with generate_signals)",
+        value=DEFAULT_CUSTOM_STRATEGY,
+        height=300
+    )
+else:
+    strategy_code = PREDEFINED_STRATEGIES[strategy_choice]
 
 with st.expander(f"View {strategy_choice}"):
     st.code(strategy_code, language='python')
@@ -200,11 +192,8 @@ with st.expander(f"View {strategy_choice}"):
 # ============================================================================
 # OPTIMIZATION GRID
 # ============================================================================
-
 st.header("2️⃣ Optimization Grid")
-
 col1, col2, col3 = st.columns(3)
-
 with col1:
     param1_name = st.text_input("Param 1 Name", value="fast")
     param1_vals = st.text_input("Param 1 Values (comma-separated)", value="63,126")
@@ -212,7 +201,6 @@ with col1:
         param1_list = [int(x.strip()) for x in param1_vals.split(',') if x.strip()]
     except:
         param1_list = [63, 126]
-
 with col2:
     param2_name = st.text_input("Param 2 Name", value="slow")
     param2_vals = st.text_input("Param 2 Values (comma-separated)", value="126,252")
@@ -220,7 +208,6 @@ with col2:
         param2_list = [int(x.strip()) for x in param2_vals.split(',') if x.strip()]
     except:
         param2_list = [126, 252]
-
 with col3:
     param3_name = st.text_input("Param 3 Name", value="threshold")
     param3_vals = st.text_input("Param 3 Values (comma-separated)", value="0")
@@ -238,17 +225,12 @@ param_grid = {
 # ============================================================================
 # PORTFOLIO SETUP
 # ============================================================================
-
 st.header("3️⃣ Portfolio Setup")
-
 col1, col2, col3 = st.columns(3)
-
 with col1:
     init_cash = st.number_input("Initial Capital ($)", value=100000, min_value=1000)
-
 with col2:
     allocation_method = st.selectbox("Allocation Method", ["equal_weight"])
-
 with col3:
     fee_bps = st.slider("Transaction Fee (bps)", 0, 50, 3)
     fee = fee_bps / 10000
@@ -256,12 +238,10 @@ with col3:
 # ============================================================================
 # RUN TESTS
 # ============================================================================
-
 st.header("4️⃣ Run Tests")
-
 col1, col2 = st.columns([3, 1])
 with col1:
-    run_tests = st.button("🚀 Run Complete Test Suite (All 10 Tests)", use_container_width=True)
+    run_tests = st.button("🚀 Run Complete Test Suite (All 20 Tests)")
 with col2:
     debug_mode = st.checkbox("🐛 Debug Output")
 
@@ -273,10 +253,8 @@ if run_tests:
     # TEST 1: STRESS TEST
     # ======================================================================
     st.subheader("Test 1️⃣: Grid Search Backtest")
-    
     with st.spinner("Running grid search..."):
-        grid_results = tester.stress_test(strategy_code, param_grid)
-    
+        grid_results = tester.stress_test(strategy_code, param_grid, verbose=True)
     if not grid_results.empty:
         col1, col2, col3, col4, col5 = st.columns(5)
         col1.metric("Best Sharpe", f"{grid_results['sharpe'].max():.2f}")
@@ -284,11 +262,9 @@ if run_tests:
         col3.metric("Avg Sharpe", f"{grid_results['sharpe'].mean():.2f}")
         col4.metric("Best Return", f"{grid_results['total_return'].max()*100:.2f}%")
         col5.metric("Min Max DD", f"{grid_results['max_dd'].min():.2%}")
-        
-        st.dataframe(grid_results.sort_values('sharpe', ascending=False), use_container_width=True)
-        
+        st.dataframe(grid_results.sort_values('sharpe', ascending=False), width='stretch')
         if hasattr(tester, 'best_stats') and tester.best_stats is not None:
-            st.write("**Equity Curve - Best Performer:**")
+            st.write("Equity Curve - Best Performer")
             fig = go.Figure()
             fig.add_trace(go.Scatter(
                 x=tester.best_stats['dates'],
@@ -304,15 +280,14 @@ if run_tests:
                 hovermode='x unified',
                 height=400
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
     else:
         st.warning("Grid search returned no results")
 
     # ======================================================================
-    # TEST 2: WALK-FORWARD VALIDATION
+    # TEST 2: WALK-FORWARD VALIDATION (simple)
     # ======================================================================
     st.subheader("Test 2️⃣: Walk-Forward Validation")
-    
     with st.spinner("Running walk-forward analysis..."):
         try:
             wf_results = tester.walk_forward_test(strategy_code, param_grid, train_years=2, test_years=1)
@@ -322,7 +297,7 @@ if run_tests:
                 col2.metric("Sharpe Std Dev", f"{wf_results['sharpe'].std():.2f}")
                 col3.metric("Avg Max DD", f"{wf_results['max_dd'].mean():.2%}")
                 col4.metric("Windows", wf_results['window'].nunique())
-                st.dataframe(wf_results, use_container_width=True)
+                st.dataframe(wf_results, width='stretch')
             else:
                 st.info("Insufficient data for walk-forward analysis")
         except Exception as e:
@@ -332,7 +307,6 @@ if run_tests:
     # TEST 3: MONTE CARLO STRESS TEST
     # ======================================================================
     st.subheader("Test 3️⃣: Monte Carlo Stress Test (500 Sims)")
-    
     with st.spinner("Running Monte Carlo simulations..."):
         try:
             mc_results = tester.monte_carlo_test(strategy_code, param_grid, n_sims=500)
@@ -344,7 +318,7 @@ if run_tests:
                 col4.metric("MC DD 5%", f"{mc_results['mc_dd_5pct'].mean():.2%}")
                 col5.metric("MC DD Mean", f"{mc_results['mc_dd_mean'].mean():.2%}")
                 col6.metric("MC DD 95%", f"{mc_results['mc_dd_95pct'].mean():.2%}")
-                st.dataframe(mc_results, use_container_width=True)
+                st.dataframe(mc_results, width='stretch')
             else:
                 st.info("No Monte Carlo results")
         except Exception as e:
@@ -354,12 +328,11 @@ if run_tests:
     # TEST 4: PARAMETER SENSITIVITY
     # ======================================================================
     st.subheader("Test 4️⃣: Parameter Sensitivity (±20%)")
-    
     with st.spinner("Running parameter sensitivity tests..."):
         try:
             sens = tester.parameter_sensitivity_test(strategy_code, param_grid, perturbation=0.2)
             if not sens.empty:
-                st.dataframe(sens, use_container_width=True)
+                st.dataframe(sens, width='stretch')
             else:
                 st.warning("No sensitivity results")
         except Exception as e:
@@ -369,12 +342,11 @@ if run_tests:
     # TEST 5: TRANSACTION COST IMPACT
     # ======================================================================
     st.subheader("Test 5️⃣: Transaction Cost Impact")
-    
     with st.spinner("Analyzing transaction costs..."):
         try:
             cost_results = tester.transaction_cost_test(strategy_code, param_grid)
             if not cost_results.empty:
-                st.dataframe(cost_results, use_container_width=True)
+                st.dataframe(cost_results, width='stretch')
             else:
                 st.info("No transaction cost results")
         except Exception as e:
@@ -384,13 +356,12 @@ if run_tests:
     # TEST 6: ROLLING METRICS
     # ======================================================================
     st.subheader("Test 6️⃣: Rolling Metrics (1-Year Windows)")
-    
     with st.spinner("Calculating rolling metrics..."):
         try:
             rolling_results = tester.rolling_metrics_test(strategy_code, param_grid, window_years=1)
             if not rolling_results.empty:
                 st.write(f"Periods analyzed: {rolling_results['period'].nunique()}")
-                st.dataframe(rolling_results, use_container_width=True)
+                st.dataframe(rolling_results, width='stretch')
             else:
                 st.info("No rolling metrics results")
         except Exception as e:
@@ -400,13 +371,12 @@ if run_tests:
     # TEST 7: CRISIS STRESS TESTS
     # ======================================================================
     st.subheader("Test 7️⃣: Crisis Stress Tests")
-    
     with st.spinner("Running historical crisis tests..."):
         try:
             crisis_results = tester.crisis_stress_test(strategy_code, param_grid)
             if not crisis_results.empty:
                 st.write(f"Crisis periods tested: {crisis_results['crisis'].nunique()}")
-                st.dataframe(crisis_results, use_container_width=True)
+                st.dataframe(crisis_results, width='stretch')
             else:
                 st.info("No crisis data in selected date range")
         except Exception as e:
@@ -416,21 +386,16 @@ if run_tests:
     # TEST 8: MONTHLY CONSISTENCY
     # ======================================================================
     st.subheader("Test 8️⃣: Monthly Returns Consistency")
-    
     with st.spinner("Analyzing monthly consistency..."):
         monthly_results, best_monthly_stats = tester.monthly_consistency_test(strategy_code, param_grid)
-    
     if not monthly_results.empty:
         col1, col2, col3 = st.columns(3)
         col1.metric("Avg Monthly Return", f"{monthly_results['avg_monthly_return'].mean()*100:.2f}%")
         col2.metric("Monthly Volatility", f"{monthly_results['monthly_volatility'].mean()*100:.2f}%")
         col3.metric("Best Month Return", f"{monthly_results['avg_monthly_return'].max()*100:.2f}%")
-        
-        st.dataframe(monthly_results, use_container_width=True)
-        
-        # ✅ FIXED 2D HEATMAP - NO MORE xaxis DICT ERROR
+        st.dataframe(monthly_results, width='stretch')
         if best_monthly_stats is not None and best_monthly_stats.get('equity_curve') is not None and len(best_monthly_stats['equity_curve']) > 21:
-            st.write("**Monthly Returns Heatmap - Best Performer:**")
+            st.write("Monthly Returns Heatmap - Best Performer")
             equity = np.array(best_monthly_stats['equity_curve'], dtype=float)
             monthly_rets = []
             for i in range(0, len(equity) - 21, 21):
@@ -439,14 +404,11 @@ if run_tests:
                 if month_start > 0:
                     ret = ((month_end - month_start) / month_start * 100)
                     monthly_rets.append(ret)
-            
             if len(monthly_rets) > 0:
-                # RESHAPE TO 2D: (years, months) for better visualization
                 n_months_per_year = 12
                 n_years = (len(monthly_rets) + n_months_per_year - 1) // n_months_per_year
                 padded_rets = monthly_rets + [np.nan] * (n_years * n_months_per_year - len(monthly_rets))
                 heatmap_data = np.array(padded_rets).reshape(n_years, n_months_per_year)
-                
                 fig = go.Figure(data=go.Heatmap(
                     z=heatmap_data,
                     colorscale='RdYlGn',
@@ -465,7 +427,7 @@ if run_tests:
                     margin=dict(l=50, r=50, t=50, b=50)
                 )
                 fig.update_xaxes(side="bottom")
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
             else:
                 st.warning("No monthly data available for heatmap")
     else:
@@ -475,10 +437,8 @@ if run_tests:
     # TEST 9: DRAWDOWN ANALYSIS
     # ======================================================================
     st.subheader("Test 9️⃣: Drawdown Analysis (Best Performer)")
-    
     with st.spinner("Analyzing drawdowns..."):
         dd_results, best_dd_stats = tester.drawdown_analysis_test(strategy_code, param_grid)
-    
     if not dd_results.empty:
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Sharpe", f"{dd_results['sharpe'].values[0]:.2f}")
@@ -486,11 +446,9 @@ if run_tests:
         col2.metric("Sortino", f"{sortino_val:.2f}" if sortino_val < 1e10 else "EXTREME")
         col3.metric("Max DD", f"{dd_results['max_dd'].values[0]:.2%}")
         col4.metric("Total Return", f"{dd_results['total_return'].values[0]:.2%}")
-        
-        st.dataframe(dd_results, use_container_width=True)
-        
+        st.dataframe(dd_results, width='stretch')
         if best_dd_stats is not None and best_dd_stats.get('drawdowns') is not None and len(best_dd_stats['drawdowns']) > 0:
-            st.write("**Drawdown Chart - Best Performer:**")
+            st.write("Drawdown Chart - Best Performer")
             fig = go.Figure()
             fig.add_trace(go.Scatter(
                 x=best_dd_stats['dates'],
@@ -507,7 +465,7 @@ if run_tests:
                 hovermode='x unified',
                 height=400
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
     else:
         st.info("No drawdown analysis results")
 
@@ -515,7 +473,6 @@ if run_tests:
     # TEST 10: KELLY CRITERION
     # ======================================================================
     st.subheader("Test 🔟: Kelly Criterion (Optimal Position Sizing)")
-    
     with st.spinner("Calculating Kelly criterion..."):
         try:
             kelly = tester.kelly_criterion_test(strategy_code, param_grid)
@@ -524,11 +481,125 @@ if run_tests:
                 col1.metric("Full Kelly", f"{kelly['full_kelly'].values[0]:.1f}%")
                 col2.metric("Half Kelly", f"{kelly['half_kelly'].values[0]:.1f}%")
                 col3.metric("Quarter Kelly", f"{kelly['quarter_kelly'].values[0]:.1f}%")
-                st.write(f"**Status:** {kelly['status'].values[0]}")
-                st.dataframe(kelly, use_container_width=True)
+                st.write(f"Status: {kelly['status'].values[0]}")
+                st.dataframe(kelly, width='stretch')
             else:
                 st.info("No Kelly criterion results")
         except Exception as e:
             st.warning(f"Kelly criterion error: {str(e)[:100]}")
+    st.success("✅ First 10 tests completed!")
 
-    st.success("✅ All 10 tests completed!")
+    # ======================================================================
+    # TEST 11–20
+    # ======================================================================
+    st.subheader("Test 1️⃣1️⃣: Conditional P/L Decomposition (EV Breakdown)")
+    with st.spinner("Decomposing EV..."):
+        try:
+            t11 = tester.test_conditional_decomposition(strategy_code, param_grid)
+            if not t11.empty:
+                st.dataframe(t11, width='stretch')
+            else:
+                st.info("No trades found for EV decomposition")
+        except Exception as e:
+            st.warning(f"Conditional decomposition error: {str(e)[:120]}")
+
+    st.subheader("Test 1️⃣2️⃣: Time Slice Stability")
+    with st.spinner("Evaluating time-slice stability..."):
+        try:
+            t12 = tester.test_time_slice_stability(strategy_code, param_grid, n_slices=4)
+            if not t12.empty:
+                st.dataframe(t12, width='stretch')
+            else:
+                st.info("Insufficient data for time-slice stability")
+        except Exception as e:
+            st.warning(f"Time-slice stability error: {str(e)[:120]}")
+
+    st.subheader("Test 1️⃣3️⃣: Regime Dependency (Volatility Terciles)")
+    with st.spinner("Analyzing regime dependency..."):
+        try:
+            t13 = tester.test_regime_dependency(strategy_code, param_grid, regime_var='volatility')
+            if not t13.empty:
+                st.dataframe(t13, width='stretch')
+            else:
+                st.info("No regime dependency results")
+        except Exception as e:
+            st.warning(f"Regime dependency error: {str(e)[:120]}")
+
+    st.subheader("Test 1️⃣4️⃣: Win/Loss Distribution Stability")
+    with st.spinner("Measuring distribution stability..."):
+        try:
+            t14 = tester.test_win_loss_distribution_stability(strategy_code, param_grid, n_slices=2, min_samples=5)
+            if not t14.empty:
+                st.dataframe(t14.replace({np.nan: 'N/A'}), width='stretch')
+            else:
+                st.info("No distribution stability results")
+        except Exception as e:
+            st.warning(f"Distribution stability error: {str(e)[:120]}")
+
+    st.subheader("Test 1️⃣5️⃣: Drawdown Under Realistic Sizing")
+    with st.spinner("Simulating sized drawdowns..."):
+        try:
+            t15 = tester.test_sized_drawdown_simulation(strategy_code, param_grid, kelly_fraction=0.25, initial_capital=init_cash)
+            if not t15.empty:
+                st.dataframe(t15, width='stretch')
+            else:
+                st.info("No sized drawdown results")
+        except Exception as e:
+            st.warning(f"Sized drawdown simulation error: {str(e)[:120]}")
+
+    st.subheader("Test 1️⃣6️⃣: Parameter Robustness")
+    with st.spinner("Assessing parameter robustness..."):
+        try:
+            t16 = tester.test_parameter_robustness(strategy_code, param_grid)
+            if not t16.empty:
+                st.dataframe(t16, width='stretch')
+            else:
+                st.info("No robustness results")
+        except Exception as e:
+            st.warning(f"Parameter robustness error: {str(e)[:120]}")
+
+    st.subheader("Test 1️⃣7️⃣: Market Regime Drift (Beta Drift)")
+    with st.spinner("Computing beta drift..."):
+        try:
+            t17 = tester.test_market_regime_drift(strategy_code, param_grid)
+            if not t17.empty:
+                st.dataframe(t17, width='stretch')
+            else:
+                st.info("No beta drift results")
+        except Exception as e:
+            st.warning(f"Market regime drift error: {str(e)[:120]}")
+
+    st.subheader("Test 1️⃣8️⃣: Slippage & Commissions Impact")
+    with st.spinner("Applying realistic costs..."):
+        try:
+            t18 = tester.test_slippage_impact(strategy_code, param_grid, slippage_bps=1, commission_bps=0.5)
+            if not t18.empty:
+                st.dataframe(t18, width='stretch')
+            else:
+                st.info("No slippage impact results")
+        except Exception as e:
+            st.warning(f"Slippage impact error: {str(e)[:120]}")
+
+    st.subheader("Test 1️⃣9️⃣: Drawdown Severity & Loss Streaks")
+    with st.spinner("Analyzing loss streaks and recovery..."):
+        try:
+            t19 = tester.test_drawdown_severity(strategy_code, param_grid)
+            if not t19.empty:
+                st.dataframe(t19, width='stretch')
+            else:
+                st.info("No drawdown severity results")
+        except Exception as e:
+            st.warning(f"Drawdown severity error: {str(e)[:120]}")
+
+    st.subheader("Test 2️⃣0️⃣: Out-of-Sample Walk-Forward Validation")
+    with st.spinner("Running rolling walk-forward validation..."):
+        try:
+            t20 = tester.test_walk_forward_validation(strategy_code, param_grid, train_pct=0.7, step_size=0.1)
+            if not t20.empty:
+                t20['overfitting_ratio'] = t20['overfitting_ratio'].replace([np.inf, -np.inf], np.nan)
+                st.dataframe(t20.fillna('N/A'), width='stretch')
+            else:
+                st.info("No walk-forward validation results")
+        except Exception as e:
+            st.warning(f"Walk-forward validation error: {str(e)[:120]}")
+    st.success("✅ Extended tests (11–20) completed!")
