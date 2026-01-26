@@ -465,36 +465,6 @@ if run_tests:
                         'test_sharpe': '{:.4f}',
                     }
                 )
-            else:
-                st.info("No walk-forward validation results")
-        except Exception as e:
-            st.warning(f"Walk-forward validation error: {str(e)[:120]}")
-
-    st.success("✅ All 20 tests completed!")# Add new tests
-st.subheader("Test 21️⃣: Multi-Asset Correlation Risk")
-with st.spinner("Running multi-asset correlation risk test..."):
-    t21 = tester.test_multi_asset_correlation_risk(strategy_code, param_grid)
-    show_df(t21)
-
-st.subheader("Test 22️⃣: Correlation Clustering")
-with st.spinner("Running correlation clustering test..."):
-    t22 = tester.test_correlation_clustering(strategy_code, param_grid)
-    show_df(t22)
-
-st.subheader("Test 23️⃣: Factor Attribution")
-with st.spinner("Running factor attribution test..."):
-    t23 = tester.test_factor_attribution(strategy_code, param_grid)
-    show_df(t23)
-
-st.subheader("Test 24️⃣: Liquidity Impact")
-with st.spinner("Running liquidity impact test..."):
-    t24 = tester.test_liquidity_impact(strategy_code, param_grid)
-    show_df(t24)
-
-st.subheader("Test 25️⃣: Dynamic Position Sizing")
-with st.spinner("Running dynamic position sizing test..."):
-    t25 = tester.test_dynamic_position_sizing(strategy_code, param_grid)
-    show_df(t25)
 
 # Add UI/UX improvements
 st.subheader("Export Results")
