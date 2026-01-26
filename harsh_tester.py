@@ -109,31 +109,15 @@ class HarshTester:
         daily_returns = np.where(np.isfinite(daily_returns), daily_returns, 0)
 
         if len(daily_returns) > 1:
-            mean_return = np.mean(daily_returns)
-            total_std = np.std(daily_returns)
-
-            if total_std > 1e-8:
-                sharpe = mean_return / total_std * np.sqrt(252)
-            else:
-                sharpe = 0.0
-
-            negative_returns = daily_returns[daily_returns < 0]
-            if len(negative_returns) > 0:
-                downside_std = np.std(negative_returns)
-            else:
-                downside_std = total_std
-
-            if downside_std > 1e-15:
-                sortino = mean_return / downside_std * np.sqrt(252)
-            else:
-                sortino = 0.0
+            sharpe = self._calculate_sharpe(daily_returns)
+            sortino = self._calculate_sortino(daily_returns)
         else:
             sharpe = 0.0
             sortino = 0.0
 
         # drawdowns are already in %
         max_dd = min(drawdowns) / 100 if drawdowns else 0.0
-        calmar = total_return / abs(max_dd) if abs(max_dd) > 1e-6 else 0.0
+        calmar = self._calculate_calmar(total_return, max_dd)
 
         return {
             'sharpe': float(sharpe),
@@ -1237,3 +1221,34 @@ class HarshTester:
             })
 
         return pd.DataFrame(results)
+    def _calculate_sharpe(self, daily_returns):
+        """Calculate Sharpe ratio"""
+        mean_return = np.mean(daily_returns)
+        total_std = np.std(daily_returns)
+        if total_std > 1e-8:
+            sharpe = mean_return / total_std * np.sqrt(self.trading_days_per_year)
+        else:
+            sharpe = 0.0
+        return sharpe
+
+    def _calculate_sortino(self, daily_returns):
+        """Calculate Sortino ratio"""
+        mean_return = np.mean(daily_returns)
+        negative_returns = daily_returns[daily_returns < 0]
+        if len(negative_returns) > 0:
+            downside_std = np.std(negative_returns)
+        else:
+            downside_std = np.std(daily_returns)
+        if downside_std > 1e-15:
+            sortino = mean_return / downside_std * np.sqrt(self.trading_days_per_year)
+        else:
+            sortino = 0.0
+        return sortino
+
+    def _calculate_calmar(self, total_return, max_dd):
+        """Calculate Calmar ratio"""
+        if abs(max_dd) > 1e-6:
+            calmar = total_return / abs(max_dd)
+        else:
+            calmar = 0.0
+        return calmar
