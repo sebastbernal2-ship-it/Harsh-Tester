@@ -11,6 +11,7 @@ class BaseStrategy:
     def __init__(self, data, params=None):
         self.data = data
         self.params = params or {}
+        self.debug = False  # Add a debug flag
 
     def generate_signals(self):
         """Override this method in subclasses"""
