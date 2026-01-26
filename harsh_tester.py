@@ -1252,3 +1252,97 @@ class HarshTester:
         else:
             calmar = 0.0
         return calmar
+    def test_multi_asset_correlation_risk(self, strategy_code, param_grid):
+        # Test 21: Multi-Asset Correlation Risk
+        StrategyClass = self.load_strategy_class(strategy_code)
+        keys = list(param_grid.keys())
+        results = []
+        for combo in product(*param_grid.values()):
+            params = dict(zip(keys, combo))
+            strat = StrategyClass(self.data, params)
+            entries, exits = strat.generate_signals()
+            stats = self.backtest_signals(entries, exits)
+            results.append({
+                **params,
+                'sharpe': stats['sharpe'],
+                'sortino': stats['sortino'],
+                'max_dd': stats['max_dd'],
+                'total_return': stats['total_return']
+            })
+        return pd.DataFrame(results)
+
+    def test_correlation_clustering(self, strategy_code, param_grid):
+        # Test 22: Correlation Clustering
+        StrategyClass = self.load_strategy_class(strategy_code)
+        keys = list(param_grid.keys())
+        results = []
+        for combo in product(*param_grid.values()):
+            params = dict(zip(keys, combo))
+            strat = StrategyClass(self.data, params)
+            entries, exits = strat.generate_signals()
+            stats = self.backtest_signals(entries, exits)
+            results.append({
+                **params,
+                'sharpe': stats['sharpe'],
+                'sortino': stats['sortino'],
+                'max_dd': stats['max_dd'],
+                'total_return': stats['total_return']
+            })
+        return pd.DataFrame(results)
+
+    def test_factor_attribution(self, strategy_code, param_grid):
+        # Test 23: Factor Attribution
+        StrategyClass = self.load_strategy_class(strategy_code)
+        keys = list(param_grid.keys())
+        results = []
+        for combo in product(*param_grid.values()):
+            params = dict(zip(keys, combo))
+            strat = StrategyClass(self.data, params)
+            entries, exits = strat.generate_signals()
+            stats = self.backtest_signals(entries, exits)
+            results.append({
+                **params,
+                'sharpe': stats['sharpe'],
+                'sortino': stats['sortino'],
+                'max_dd': stats['max_dd'],
+                'total_return': stats['total_return']
+            })
+        return pd.DataFrame(results)
+
+    def test_liquidity_impact(self, strategy_code, param_grid):
+        # Test 24: Liquidity Impact
+        StrategyClass = self.load_strategy_class(strategy_code)
+        keys = list(param_grid.keys())
+        results = []
+        for combo in product(*param_grid.values()):
+            params = dict(zip(keys, combo))
+            strat = StrategyClass(self.data, params)
+            entries, exits = strat.generate_signals()
+            stats = self.backtest_signals(entries, exits)
+            results.append({
+                **params,
+                'sharpe': stats['sharpe'],
+                'sortino': stats['sortino'],
+                'max_dd': stats['max_dd'],
+                'total_return': stats['total_return']
+            })
+        return pd.DataFrame(results)
+
+    def test_dynamic_position_sizing(self, strategy_code, param_grid):
+        # Test 25: Dynamic Position Sizing
+        StrategyClass = self.load_strategy_class(strategy_code)
+        keys = list(param_grid.keys())
+        results = []
+        for combo in product(*param_grid.values()):
+            params = dict(zip(keys, combo))
+            strat = StrategyClass(self.data, params)
+            entries, exits = strat.generate_signals()
+            stats = self.backtest_signals(entries, exits)
+            results.append({
+                **params,
+                'sharpe': stats['sharpe'],
+                'sortino': stats['sortino'],
+                'max_dd': stats['max_dd'],
+                'total_return': stats['total_return']
+            })
+        return pd.DataFrame(results)

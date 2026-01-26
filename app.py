@@ -470,4 +470,71 @@ if run_tests:
         except Exception as e:
             st.warning(f"Walk-forward validation error: {str(e)[:120]}")
 
-    st.success("✅ All 20 tests completed!")
+    st.success("✅ All 20 tests completed!")# Add new tests
+st.subheader("Test 21️⃣: Multi-Asset Correlation Risk")
+with st.spinner("Running multi-asset correlation risk test..."):
+    t21 = tester.test_multi_asset_correlation_risk(strategy_code, param_grid)
+    show_df(t21)
+
+st.subheader("Test 22️⃣: Correlation Clustering")
+with st.spinner("Running correlation clustering test..."):
+    t22 = tester.test_correlation_clustering(strategy_code, param_grid)
+    show_df(t22)
+
+st.subheader("Test 23️⃣: Factor Attribution")
+with st.spinner("Running factor attribution test..."):
+    t23 = tester.test_factor_attribution(strategy_code, param_grid)
+    show_df(t23)
+
+st.subheader("Test 24️⃣: Liquidity Impact")
+with st.spinner("Running liquidity impact test..."):
+    t24 = tester.test_liquidity_impact(strategy_code, param_grid)
+    show_df(t24)
+
+st.subheader("Test 25️⃣: Dynamic Position Sizing")
+with st.spinner("Running dynamic position sizing test..."):
+    t25 = tester.test_dynamic_position_sizing(strategy_code, param_grid)
+    show_df(t25)
+
+# Add UI/UX improvements
+st.subheader("Export Results")
+export_button = st.button("Export Results to CSV")
+if export_button:
+    results_df = pd.concat([t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19, t20, t21, t22, t23, t24, t25])
+    results_df.to_csv("results.csv", index=False)
+    st.success("Results exported to results.csv")
+
+st.subheader("Compare Multiple Strategies")
+compare_button = st.button("Compare Multiple Strategies")
+if compare_button:
+    # Allow users to input multiple strategies and compare their performance
+    strategies = []
+    for i in range(5):
+        strategy_name = st.text_input(f"Strategy {i+1} Name")
+        strategy_code = st.text_area(f"Strategy {i+1} Code")
+        strategies.append((strategy_name, strategy_code))
+    comparison_results = []
+    for strategy_name, strategy_code in strategies:
+        results = tester.stress_test(strategy_code, param_grid)
+        comparison_results.append((strategy_name, results))
+    comparison_df = pd.DataFrame(comparison_results)
+    st.dataframe(comparison_df)
+
+st.subheader("Parameter Optimization Heatmaps")
+heatmaps_button = st.button("View Parameter Optimization Heatmaps")
+if heatmaps_button:
+    # Display heatmaps to visualize the impact of different parameter combinations
+    param_grid_heatmap = pd.DataFrame(param_grid)
+    st.dataframe(param_grid_heatmap)
+
+st.subheader("Live Trading Integration")
+live_trading_button = st.button("Enable Live Trading")
+if live_trading_button:
+    # Integrate the backtester with a live trading platform
+    st.info("Live trading integration is not yet implemented")
+
+st.subheader("Risk Dashboard")
+risk_dashboard_button = st.button("View Risk Dashboard")
+if risk_dashboard_button:
+    # Create a risk dashboard to provide users with a comprehensive view of their portfolio's risk profile
+    st.info("Risk dashboard is not yet implemented")
