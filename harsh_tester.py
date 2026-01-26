@@ -34,7 +34,7 @@ class HarshTester:
         self.best_dd_stats = None
         self.debug = True  # Enable debug output
 
-    def backtest_signals(self, entries, exits, data=None):
+    def backtest_signals(self, entries: np.ndarray, exits: np.ndarray, data: pd.DataFrame = None) -> dict:
         """Core backtesting logic with cash + positions equity"""
         if data is None:
             close = self.data.values
