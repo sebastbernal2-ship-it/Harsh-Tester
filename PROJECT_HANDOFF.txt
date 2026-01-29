@@ -1,0 +1,638 @@
+═══════════════════════════════════════════════════════════════════════════════
+    HARSH STRATEGY TESTER - COMPLETE PROJECT HANDOFF & DEVELOPMENT GUIDE
+═══════════════════════════════════════════════════════════════════════════════
+
+PROJECT VISION & SCOPE
+═══════════════════════════════════════════════════════════════════════════════
+
+HARSH Strategy Tester is a PRODUCTION-GRADE BACKTESTING ENGINE designed for 
+algorithmic traders and quantitative researchers. It's a sophisticated statistical 
+framework that doesn't just test if a strategy makes money—it rigorously validates 
+whether that edge is REAL, ROBUST, and SURVIVABLE in live markets.
+
+Core Philosophy:
+  • Most trading strategies fail in production because they overfit during 
+    development (look good on backtest, fail in real trading)
+  • This tool applies different stress tests that expose overfitting, regime 
+    dependency, parameter brittleness, and cost sensitivity
+  • Each test answers a specific question about strategy viability
+  • Results displayed in clean Streamlit UI for rapid iteration
+
+Target User: Quant traders, algo developers, hedge funds, anyone building 
+systematic strategies that need to SURVIVE real-world conditions.
+
+═══════════════════════════════════════════════════════════════════════════════
+ARCHITECTURE OVERVIEW
+═══════════════════════════════════════════════════════════════════════════════
+
+TWO-FILE ARCHITECTURE:
+
+1. app.py (Frontend)
+   - Streamlit UI layer
+   - Handles user input (strategy code, param grids, data)
+   - Displays 20 test results in tabs
+   - Includes visualizations (equity curves, drawdowns, heatmaps)
+
+2. harsh_tester.py (Backend Engine)
+   - HarshTester class: Core backtesting + 20 test methods
+   - BaseStrategy class: Strategy interface
+   - backtest_signals() method: Low-level simulation engine
+   - Each test returns pd.DataFrame with results
+
+DATA FLOW:
+  User Input (Code + Params) 
+         ↓
+   app.py validates & calls HarshTester methods
+         ↓
+   HarshTester runs tests in parallel
+         ↓
+   Each test returns DataFrame
+         ↓
+   app.py displays results in tabs/charts
+
+═══════════════════════════════════════════════════════════════════════════════
+THE CURRENT 20 TESTS - COMPLETE BREAKDOWN
+═══════════════════════════════════════════════════════════════════════════════
+
+Each test is INDEPENDENT and answers a specific robustness question:
+
+TEST 1: STRESS TEST (GRID SEARCH)
+  Method: stress_test(strategy_code, param_grid) -> DataFrame
+  What it does: Exhaustively tests all parameter combinations
+  Why special: Finds the SINGLE best performer across all combinations
+  Output: Best Sharpe, returns, Sortino, max drawdown for each combo
+  Key metric: Best Sharpe ratio achieved
+  When it fails: Low Sharpe or unstable across combos = fragile strategy
+  Use case: Initial parameter optimization
+
+TEST 2: WALK-FORWARD VALIDATION
+  Method: walk_forward_test(strategy_code, param_grid, train_years=2, test_years=1) -> DataFrame
+  What it does: Trains on 2 years, tests on 1 year, rolling forward
+  Why special: GOLD STANDARD overfitting detector - if backtest Sharpe >> WF Sharpe, 
+             you're overfit
+  Output: Sharpe for train/test windows
+  Key metric: Walk-forward Sharpe consistency
+  When it fails: Train Sharpe >> Test Sharpe = overfitting detected
+  Use case: Confirm results don't degrade on out-of-sample data
+
+TEST 3: MONTE CARLO STRESS TEST
+  Method: monte_carlo_test(strategy_code, param_grid, n_sims=500) -> DataFrame
+  What it does: Resamples historical returns 500x, recalculates metrics
+  Why special: Shows fragility under random return sequences - real markets don't 
+             repeat history exactly
+  Output: 5th/50th/95th percentile Sharpe, Sortino, max_dd
+  Key metric: How tight 5-95 percentile range is (tight = robust)
+  When it fails: Wide 5-95 range = fragile edge
+  Use case: Stress test against return distribution shifts
+
+TEST 4: PARAMETER SENSITIVITY
+  Method: parameter_sensitivity_test(strategy_code, param_grid, perturbation=0.2) -> DataFrame
+  What it does: Takes best params, tweaks each by ±20%, measures impact
+  Why special: Shows which params are "knife-edge" (break easily) vs. robust
+  Output: Sharpe/return/DD for -20%, 0%, +20% of each param
+  Key metric: Which params cause biggest Sharpe drop?
+  When it fails: One param change tanks Sharpe = brittle strategy
+  Use case: Identify which params to focus on vs. which are flexible
+
+TEST 5: TRANSACTION COST IMPACT
+  Method: transaction_cost_test(strategy_code, param_grid, cost_levels) -> DataFrame
+  What it does: Tests at 0 bps, 50 bps, 100 bps, 200 bps trading costs
+  Why special: MOST STRATEGIES DIE HERE - backtest assumes 0 costs, real world has 
+             1-2 bps slippage + 0.5 bps commission
+  Output: Avg/best Sharpe at each cost level
+  Key metric: Does edge survive realistic costs?
+  When it fails: Sharpe collapses at 50+ bps = not profitable in reality
+  Use case: Test viability with realistic trading costs
+
+TEST 6: ROLLING METRICS (1-YEAR WINDOWS)
+  Method: rolling_metrics_test(strategy_code, param_grid, window_years=1) -> DataFrame
+  What it does: Splits data into 1-year rolling windows, tests each
+  Why special: Detects if strategy performance DECAYS over time (regime shift, 
+             saturation, market evolution)
+  Output: Sharpe/return/DD for each year
+  Key metric: Does Sharpe stay stable year-to-year?
+  When it fails: Sharpe trends downward = strategy degrading
+  Use case: Spot strategy aging/obsolescence
+
+TEST 7: CRISIS STRESS TEST
+  Method: crisis_stress_test(strategy_code, param_grid, crisis_dates) -> DataFrame
+  What it does: Replays 2020 COVID crash, 2022 rate hike, 2023 banking panic
+  Why special: Real stress tests during actual market dislocations
+  Output: Sharpe/return/DD during each crisis
+  Key metric: How bad are losses during black swans?
+  When it fails: Max DD > 50% during crisis = dangerous
+  Use case: Validate survival during tail events
+
+TEST 8: MONTHLY CONSISTENCY
+  Method: monthly_consistency_test(strategy_code, param_grid) -> (DataFrame, best_stats)
+  What it does: Breaks equity curve into monthly returns, measures volatility
+  Why special: Monthly consistency = sign of steady edge (not just lucky rallies)
+  Output: Avg monthly return, monthly volatility
+  Key metric: Coefficient of variation (volatility/return) - lower = more consistent
+  When it fails: High monthly volatility = unpredictable earnings
+  Use case: Validate strategy doesn't depend on single lucky months
+
+TEST 9: DRAWDOWN ANALYSIS
+  Method: drawdown_analysis_test(strategy_code, param_grid) -> (DataFrame, best_stats)
+  What it does: Maps entire drawdown curve (peak-to-trough declines)
+  Why special: Emotional reality - traders blow up at 50% DD regardless of Sharpe
+  Output: Max drawdown, full drawdown path
+  Key metric: Max DD and recovery time
+  When it fails: 40%+ DD = likely to abandon strategy mid-trade
+  Use case: Understand pain tolerance required
+
+TEST 10: KELLY CRITERION
+  Method: kelly_criterion_test(strategy_code, param_grid) -> DataFrame
+  What it does: Calculates optimal position size = (Win% × Avg Win - Loss% × Avg Loss) / Avg Loss
+  Why special: Mathematical framework for "how much should I bet?" - prevents overleveraging
+  Output: Full Kelly %, half Kelly %, quarter Kelly %
+  Key metric: Kelly % = true edge + optimal sizing
+  When it fails: Kelly < 5% = barely tradeable
+  Use case: Determine position sizing and leverage limits
+
+TEST 11: CONDITIONAL P/L DECOMPOSITION
+  Method: conditional_decomposition_test(strategy_code, param_grid) -> DataFrame
+  What it does: Breaks down every entry into win/loss statistics
+  Why special: Reveals micro-pattern in strategy behavior (avg win size, win rate)
+  Output: Win rate %, avg win, avg loss, EV per trade
+  Key metric: Win rate × avg win - loss rate × avg loss = edge
+  When it fails: Win rate < 40% = need very high avg win/loss ratio to work
+  Use case: Understand trade-level statistics
+
+TEST 12: TIME SLICE STABILITY
+  Method: time_slice_stability_test(strategy_code, param_grid, n_slices=4) -> DataFrame
+  What it does: Splits full period into Q1/Q2/Q3/Q4, tests Sharpe consistency
+  Why special: Detects if strategy works evenly across market periods
+  Output: Sharpe for each quarter, coefficient of variation, stability score
+  Key metric: CV < 0.5 = stable across periods
+  When it fails: One quarter tanks Sharpe = regime dependent
+  Use case: Spot seasonal/structural dependence
+
+TEST 13: REGIME DEPENDENCY
+  Method: regime_dependency_test(strategy_code, param_grid) -> DataFrame
+  What it does: Tests separately in high-vol vs. low-vol market regimes
+  Why special: Many strategies only work in one regime (bull/bear, high/low vol)
+  Output: Sharpe in high-vol markets, Sharpe in low-vol markets
+  Key metric: Consistency score (1.0 = works equally in both)
+  When it fails: Works in high-vol but not low-vol (or vice versa) = regime-trapped
+  Use case: Validate strategy adaptability
+
+TEST 14: WIN/LOSS DISTRIBUTION STABILITY
+  Method: win_loss_distribution_test(strategy_code, param_grid, n_slices=2) -> DataFrame
+  What it does: Checks if win/loss patterns drift between first and second half
+  Why special: Win distribution changing = strategy adapting to evolving market
+  Output: Distribution stability score
+  Key metric: > 0.7 = stable trade distributions
+  When it fails: Distribution drifts = strategy parameters becoming stale
+  Use case: Detect when to refresh parameters
+
+TEST 15: DRAWDOWN UNDER REALISTIC SIZING
+  Method: sized_drawdown_test(strategy_code, param_grid) -> DataFrame
+  What it does: Applies Kelly-calculated position sizing, recalculates max DD
+  Why special: Real DD under realistic leverage, not full capital allocation
+  Output: Kelly fraction, max DD at Kelly sizing
+  Key metric: How bad is DD when properly sized?
+  When it fails: Still > 40% DD even at Kelly sizing = too volatile
+  Use case: Validate tolerable risk under realistic positioning
+
+TEST 16: PARAMETER ROBUSTNESS
+  Method: parameter_robustness_test(strategy_code, param_grid) -> DataFrame
+  What it does: Scores each param combo on robustness vs. mean Sharpe
+  Why special: Identifies "Goldilocks" parameter sets (near-optimal AND robust)
+  Output: Robustness score (0-1), is_robust boolean
+  Key metric: Robust params = small Sharpe drop from optimum
+  When it fails: Best params are fragile loners = overfitting
+  Use case: Select robust params vs. peak params
+
+TEST 17: MARKET REGIME DRIFT
+  Method: market_regime_drift_test(strategy_code, param_grid) -> DataFrame
+  What it does: Compares bull market (first half) vs. bear market (second half) Sharpe
+  Why special: Detects if strategy only works in rallies (bull whip strategy)
+  Output: Bull Sharpe, Bear Sharpe, consistency score
+  Key metric: Works equally in both = consistency near 1.0
+  When it fails: Works in bull but crashes in bear = dangerous
+  Use case: Validate all-weather capability
+
+TEST 18: SLIPPAGE & COMMISSION IMPACT
+  Method: slippage_impact_test(strategy_code, param_grid, slippage_bps=1.0, commission_bps=0.5) -> DataFrame
+  What it does: Degrades returns by 1 bps slippage + 0.5 bps commission (realistic execution)
+  Why special: CRITICAL - many backtests assume perfect fills, real execution costs money
+  Output: Sharpe with 0 costs, Sharpe with costs, degradation %
+  Key metric: Edge survives costs? (Sharpe with costs > 0)
+  When it fails: Sharpe goes negative after costs = strategy only works in theory
+  Use case: Reality check on profitability
+
+TEST 19: CONSECUTIVE LOSS STREAKS
+  Method: consecutive_loss_test(strategy_code, param_grid) -> DataFrame
+  What it does: Calculates longest string of losing trades
+  Why special: Psychological reality - 10 losses in a row makes traders quit
+  Output: Max consecutive losses, probability of 10-loss streak
+  Key metric: Max streak < 5 is tolerable, > 10 is dangerous
+  When it fails: Max streak > 15 = likely to abandon in production
+  Use case: Validate psychological sustainability
+
+TEST 20: WALK-FORWARD OVERFITTING DETECTION (ULTIMATE TEST)
+  Method: walk_forward_overfit_test(strategy_code, param_grid, train_pct=0.7, step_size=0.1) -> DataFrame
+  What it does: Trains on 70% data, tests on 30%, repeats sliding window
+             Calculates overfit ratio = train Sharpe / test Sharpe
+  Why special: THE ULTIMATE OVERFITTING TEST - if train Sharpe >> test Sharpe, 
+             you're using future knowledge
+  Output: Train Sharpe, test Sharpe, overfit ratio, is_overfit (>2.0 = overfit)
+  Key metric: Overfit ratio close to 1.0 = healthy (no overfitting)
+  When it fails: Overfit ratio > 2.0 = strategy will disappoint in live trading
+  Use case: Final validation before deploying
+
+═══════════════════════════════════════════════════════════════════════════════
+CORE ENGINE - backtest_signals() METHOD
+═══════════════════════════════════════════════════════════════════════════════
+
+This is the heart of the entire system. Every test ultimately calls this method.
+
+INPUTS:
+  • entries: Boolean array (or DataFrame) where True = entry signal
+  • exits: Boolean array (or DataFrame) where True = exit signal
+  • data: OHLC price data (defaults to self.data)
+
+LOGIC FLOW:
+  1. Reshape inputs to 2D arrays for compatibility
+  2. Initialize positions array (zeros for each asset)
+  3. For each timestep i:
+     a. Check entry signals - if True and no position, allocate capital:
+        position_shares = (init_cash / n_assets) / price[i] × (1 - fee)
+     b. Check exit signals - if True and position exists, close:
+        position_shares = 0
+     c. Calculate portfolio value = sum(position_shares × price[i])
+     d. Track running max and calculate drawdown
+  4. Calculate metrics:
+     - Daily returns = Δ equity / lagged equity
+     - Sharpe = annualized(mean return / std return)
+     - Sortino = annualized(mean return / std downside returns)
+     - Calmar = total return / |max drawdown|
+  5. Return dict with equity_curve, drawdowns, metrics, dates
+
+CRITICAL HANDLING:
+  • Prevents division by zero (equity ≤ 0 converted to 1e-6)
+  • Handles NaN/Inf returns (converted to 0)
+  • Preserves date indices for charting
+  • Returns full equity curve for Tests 8, 9 (for plotting)
+  • Strips equity_curve from results DataFrame to avoid memory bloat
+
+═══════════════════════════════════════════════════════════════════════════════
+STRATEGY INTERFACE - BaseStrategy CLASS
+═══════════════════════════════════════════════════════════════════════════════
+
+All user strategies MUST inherit from BaseStrategy:
+
+    class MyStrategy(BaseStrategy):
+        def generate_signals(self):
+            # Your logic here
+            entries = pd.Series(...)  # or DataFrame
+            exits = pd.Series(...)    # or DataFrame
+            return entries, exits
+
+INITIALIZATION:
+  • self.data: OHLC DataFrame passed from backtester
+  • self.params: Dict of parameters from param_grid
+
+REQUIREMENTS:
+  • generate_signals() MUST return (entries, exits) tuple
+  • entries/exits can be Series or DataFrame
+  • Values must be boolean or boolean-convertible (0/1)
+  • Length MUST match self.data (same number of rows)
+  • Index should match self.data.index for alignment
+
+EXAMPLE:
+    class SMA200Strategy(BaseStrategy):
+        def generate_signals(self):
+            period = self.params.get('period', 200)
+            threshold = self.params.get('threshold', 0.02)
+            
+            sma = self.data.rolling(period).mean()
+            price_pct = (self.data - sma) / sma
+            
+            entries = price_pct < -threshold  # Buy oversold
+            exits = price_pct > 0              # Sell at fair value
+            
+            return entries, exits
+
+═══════════════════════════════════════════════════════════════════════════════
+STREAMLIT UI (app.py) - USER INTERACTION FLOW
+═══════════════════════════════════════════════════════════════════════════════
+
+STRUCTURE:
+  1. Sidebar: Strategy code editor + param grid input
+  2. Tabs: 20 test result tabs
+  3. Charts: Equity curves, heatmaps, drawdown paths
+
+PARAMETER GRID FORMAT:
+  User inputs as Python dict:
+    {'period': [20, 50, 100], 'threshold': [0.01, 0.02, 0.05]}
+  
+  This creates 3 × 3 = 9 combinations tested in Test 1
+
+CACHED OPERATIONS:
+  @st.cache_data used for:
+    - Load data (yfinance)
+    - Load strategy class from code
+    - Run individual tests (memoized by strategy + params)
+
+DISPLAY PATTERNS:
+  • Metrics row: 3-4 KPI cards (Sharpe, Return, Max DD, etc.)
+  • Table: Full results DataFrame with filtering
+  • Chart: Equity curve, heatmap, or specialized viz
+
+═══════════════════════════════════════════════════════════════════════════════
+SETUP & INSTALLATION
+═══════════════════════════════════════════════════════════════════════════════
+
+REQUIREMENTS:
+  • Python 3.8+
+  • pandas, numpy, itertools (standard)
+  • streamlit (UI)
+  • yfinance (data fetching)
+  • plotly (charting)
+
+INSTALLATION:
+  pip install streamlit yfinance plotly pandas numpy
+
+FILE STRUCTURE:
+  /Harsh-Tester/
+    ├── app.py (Streamlit frontend)
+    ├── harsh_tester.py (Backtesting engine + 20 tests)
+    └── requirements.txt (dependencies)
+
+RUN:
+  streamlit run app.py
+  
+  Open browser to http://localhost:8501
+
+═══════════════════════════════════════════════════════════════════════════════
+EXTENDING THE SYSTEM - ADDING NEW TESTS
+═══════════════════════════════════════════════════════════════════════════════
+
+To add Test 21, 22, etc.:
+
+STEP 1: Add method to HarshTester class (harsh_tester.py)
+  
+  def my_new_test(self, strategy_code: str, param_grid: dict) -> pd.DataFrame:
+      """Test 21: My New Test Description"""
+      StrategyClass = self.load_strategy_class(strategy_code)
+      keys = list(param_grid.keys())
+      results = []
+      
+      # Your test logic here
+      for combo in product(*param_grid.values()):
+          params = dict(zip(keys, combo))
+          strat = StrategyClass(self.data, params)
+          entries, exits = strat.generate_signals()
+          
+          # Convert Series to DataFrame if needed
+          if isinstance(entries, pd.Series):
+              entries = entries.to_frame()
+          if isinstance(exits, pd.Series):
+              exits = exits.to_frame()
+          
+          stats = self.backtest_signals(entries, exits)
+          
+          results.append({
+              **params,
+              'metric1': stats['sharpe'],
+              'metric2': stats['total_return'],
+              # Add your custom metrics
+          })
+      
+      return pd.DataFrame(results) if results else pd.DataFrame()
+
+STEP 2: Add tab to app.py (after Test 20)
+
+  # ======================================================================
+  # TEST 21: MY NEW TEST
+  # ======================================================================
+  st.subheader("Test 21️⃣: My New Test")
+  
+  with st.spinner("Running..."):
+      try:
+          results = tester.my_new_test(strategy_code, param_grid)
+          if not results.empty:
+              col1, col2, col3 = st.columns(3)
+              col1.metric("Metric1 Avg", f"{results['metric1'].mean():.4f}")
+              col2.metric("Metric2 Max", f"{results['metric2'].max():.4f}")
+              col3.metric("Count", f"{len(results)}")
+              st.dataframe(results, use_container_width=True)
+          else:
+              st.info("No results available")
+      except Exception as e:
+          st.warning(f"Test error: {str(e)[:100]}")
+
+KEY PRINCIPLES:
+  ✓ Always return pd.DataFrame (even if empty)
+  ✓ Include parameter columns (**params)
+  ✓ Handle NaN/Inf values safely
+  ✓ Add debug prints if needed (set self.debug = True)
+  ✓ Test with small param_grid first (faster iteration)
+  ✓ Use @st.cache_data for expensive ops in app.py
+
+═══════════════════════════════════════════════════════════════════════════════
+DEVELOPMENT BEST PRACTICES
+═══════════════════════════════════════════════════════════════════════════════
+
+CODE QUALITY:
+  • Keep tests modular (independent, can run individually)
+  • Always validate input shapes (reshape to 2D if needed)
+  • Handle edge cases (empty data, single value, NaN)
+  • Use try/except to prevent one bad test from crashing app
+  • Return consistent DataFrame structure
+
+PERFORMANCE:
+  • Limit Monte Carlo sims (default 500, reduce to 200 for speed)
+  • Sample param_grid if > 100 combinations (cartesian explosion)
+  • Use @st.cache_data to avoid recalculating
+  • Test 1 should run in ~5s, Test 2-20 should be ~30-40s total
+
+DEBUGGING:
+  • Set self.debug = True in __init__ to see print statements
+  • Check equity_curve shape matches dates
+  • Verify returns calculation isn't producing Inf/NaN
+  • Plot equity curve manually to spot anomalies
+
+DATA VALIDATION:
+  • Ensure OHLC data is numeric (astype(float))
+  • Check for missing values (ffill or dropna)
+  • Verify signals are boolean or boolean-convertible
+  • Confirm signal length matches data length
+
+═══════════════════════════════════════════════════════════════════════════════
+COMMON ERRORS & FIXES
+═══════════════════════════════════════════════════════════════════════════════
+
+ERROR: "ValueError: shape mismatch"
+  CAUSE: entries/exits have different length than data
+  FIX: Align indices or pad signals to match data length
+
+ERROR: "ZeroDivisionError in Sharpe calculation"
+  CAUSE: std(returns) = 0 (no volatility)
+  FIX: Already handled - checks if std > 1e-8 before dividing
+
+ERROR: "Inf/NaN in results"
+  CAUSE: Equity curve goes to 0, produces division by zero
+  FIX: Already handled - clamps equity to 1e-6 minimum
+
+ERROR: "Memory error on large backtest"
+  CAUSE: equity_curve stored for all 20 tests
+  FIX: Drop equity_curve/drawdowns/dates before returning DataFrame
+
+ERROR: "Streamlit app doesn't update on code change"
+  CAUSE: @st.cache_data caching old results
+  FIX: Click "Rerun" button or clear cache with Ctrl+Shift+C
+
+═══════════════════════════════════════════════════════════════════════════════
+PRODUCTION DEPLOYMENT CHECKLIST
+═══════════════════════════════════════════════════════════════════════════════
+
+BEFORE GOING LIVE:
+  ☐ Test with real strategy code (not dummy)
+  ☐ Verify all tests complete without errors
+  ☐ Check runtime < 120 seconds for reasonable param_grid
+  ☐ Validate results match manual backtest
+  ☐ Set self.debug = False to remove console spam
+  ☐ Add custom transaction costs to match your broker
+  ☐ Backtest period should be 3+ years minimum
+  ☐ Test on at least 2 different securities/assets
+  ☐ Document parameter ranges and strategy logic
+  ☐ Get institutional review (if in fund environment)
+
+MONITORING:
+  ☐ Track which tests correlate with live performance
+  ☐ Adjust crisis dates if using pre-2020 data
+  ☐ Update Test 5 costs if broker changes fees
+  ☐ Rerun monthly to catch regime shifts (Test 6, 13, 17)
+  ☐ Monitor Test 20 for overfitting creep
+
+═══════════════════════════════════════════════════════════════════════════════
+ROADMAP & FUTURE ENHANCEMENTS
+═══════════════════════════════════════════════════════════════════════════════
+
+CURRENT STATE: 20 tests fully functional, production-ready
+
+POTENTIAL ADDITIONS:
+
+Test 21: Multi-Asset Correlation Risk
+  - Tests strategy in high/low correlation regimes
+  - Validates diversification effectiveness
+
+Test 22: Correlation Clustering
+  - Tests robustness when asset correlations spike (crisis mode)
+
+Test 23: Factor Attribution
+  - Decomposes returns into market/factor exposures
+  - Validates strategy isn't just factor timing
+
+Test 24: Liquidity Impact (Order Fill Simulation)
+  - Simulates partial fills on large orders
+  - Tests impact of position size on slippage
+
+Test 25: Dynamic Position Sizing
+  - Optimizes Kelly fraction over time
+  - Validates sizing adaptation
+
+UI/UX IMPROVEMENTS:
+  • Export results to CSV/Excel
+  • Compare multiple strategies side-by-side
+  • Parameter optimization heatmaps
+  • Live trading integration (paper trading)
+  • Risk dashboard (aggregate across strategies)
+  • Email alerts on test failures
+
+PERFORMANCE OPTIMIZATIONS:
+  • Parallelize tests using multiprocessing
+  • GPU acceleration for Monte Carlo (cupy)
+  • Incremental caching (store test results, reuse)
+  • Vectorized backtest (current: slow loop-based)
+
+═══════════════════════════════════════════════════════════════════════════════
+KEY INSIGHTS FOR NEW DEVELOPERS
+═══════════════════════════════════════════════════════════════════════════════
+
+1. THIS IS NOT A PROFIT MAXIMIZER
+   - Goal is to find ROBUST, REALISTIC edge
+   - Many backtests find high Sharpe but 0 real-world profit
+   - This tool asks "Will this work when real costs, slippage, regime change occur?"
+
+2. THE TESTS ARE HIGHLY CORRELATED
+   - If strategy fails Test 2 (walk-forward), likely fails Test 20 too
+   - If strategy fails Test 5 (costs), definitely fails Test 18 (slippage)
+   - Run all 20, but focus on failures in Tests 2, 5, 18, 20 first
+
+3. PARAMETER OVERFITTING IS THE SILENT KILLER
+   - You can find amazing parameter sets that work on backtest
+   - Test 4 (sensitivity) and Test 20 (overfitting) catch this
+   - Use Test 16 (robustness) to pick stable params, not peak params
+
+4. THE EQUITY CURVE MATTERS MORE THAN SHARPE
+   - Sharpe of 0.5 with smooth equity curve > Sharpe of 2.0 with wild swings
+   - Look at Test 8 (monthly consistency) and Test 9 (drawdown path)
+   - Would you be comfortable holding through the worst drawdown?
+
+5. REGIME IS EVERYTHING
+   - Tests 7, 13, 17 all measure regime dependence
+   - A strategy that only works in bull markets is a ticking time bomb
+   - Validate equal performance in BOTH high/low vol and bull/bear
+
+═══════════════════════════════════════════════════════════════════════════════
+CONTACT & SUPPORT
+═══════════════════════════════════════════════════════════════════════════════
+
+DOCUMENTATION:
+  - Each method has docstring with inputs/outputs
+  - Inline comments explain complex calculations
+  - This handoff file covers architecture + usage
+
+COMMON QUESTIONS:
+  Q: Why 20 tests, not 10 or 50?
+  A: 20 is the "sweet spot" - covers all major failure modes without being 
+     overwhelming. Each test adds unique insight.
+
+  Q: Can I modify the backtesting logic?
+  A: Yes, but carefully. backtest_signals() is called by all 20 tests.
+     Changes propagate everywhere. Test thoroughly.
+
+  Q: How do I trust these results?
+  A: Compare to manual backtest or another tool (Backtrader, VectorBT).
+     Validate on known strategies first.
+
+  Q: Why does Test 1 output look different than Test 20?
+  A: Different tests measure different things. Test 1 = best combo overall.
+     Test 20 = whether that combo overfit. Both needed for full picture.
+
+═══════════════════════════════════════════════════════════════════════════════
+VERSION HISTORY - May be Innaccurate
+═══════════════════════════════════════════════════════════════════════════════
+
+v5.2 (CURRENT - PRODUCTION READY)
+  ✓ All 20 tests functional
+  ✓ Debug output removed (clean console)
+  ✓ Streamlit UI fully optimized
+  ✓ Handles edge cases (NaN, Inf, empty data)
+  ✓ Modular test structure (add tests easily)
+
+v5.0
+  ✓ Initial 20-test architecture
+  ✓ Core backtesting engine complete
+  ✓ Tests 1-10 fully working
+
+v4.0
+  ✓ Streamlit UI prototype
+
+═══════════════════════════════════════════════════════════════════════════════
+END OF HANDOFF DOCUMENT
+═══════════════════════════════════════════════════════════════════════════════
+
+This document contains EVERYTHING needed to:
+  • Understand the full vision
+  • Maintain existing code
+  • Add new tests (21+)
+  • Deploy in production
+  • Debug issues
+  • Extend functionality
+
+Good luck! 🚀
